@@ -3,13 +3,16 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button, Input, Select, Card, CardContent, CardHeader, CardTitle } from '@/components/ui';
-import { CreateOrderDto, CreateOrderItemDto, WorkType, MaterialType, User, Patient } from '@/types';
+import { TeethSelector } from '@/components/odontogram';
+import { CreateOrderDto, CreateOrderItemDto, WorkType, MaterialType, User, Patient, UserRole } from '@/types';
 import { getWorkTypeLabel, getMaterialLabel } from '@/lib/utils';
 import { api } from '@/lib/api';
 
 interface OrderFormProps {
   laboratories: User[];
+  dentists: User[];
   patients: Patient[];
+  userRole: UserRole;
 }
 
 const workTypes: WorkType[] = [
@@ -36,13 +39,15 @@ const materials: MaterialType[] = [
 
 const shades = ['A1', 'A2', 'A3', 'A3.5', 'A4', 'B1', 'B2', 'B3', 'B4', 'C1', 'C2', 'C3', 'C4', 'D2', 'D3', 'D4'];
 
-export function OrderForm({ laboratories, patients }: OrderFormProps) {
+export function OrderForm({ laboratories, dentists, patients, userRole }: OrderFormProps) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const isLaboratory = userRole === 'LABORATORY';
 
   const [formData, setFormData] = useState<CreateOrderDto>({
     laboratoryId: '',
+    dentistId: '',
     patientId: '',
     patientName: '',
     priority: 'normal',
@@ -60,8 +65,7 @@ export function OrderForm({ laboratories, patients }: OrderFormProps) {
     ],
   });
 
-  const [teethInput, setTeethInput] = useState<string[]>(['']);
-
+  
   const handleAddItem = () => {
     setFormData((prev) => ({
       ...prev,
@@ -77,7 +81,6 @@ export function OrderForm({ laboratories, patients }: OrderFormProps) {
         },
       ],
     }));
-    setTeethInput((prev) => [...prev, '']);
   };
 
   const handleRemoveItem = (index: number) => {
@@ -86,7 +89,6 @@ export function OrderForm({ laboratories, patients }: OrderFormProps) {
       ...prev,
       items: prev.items.filter((_, i) => i !== index),
     }));
-    setTeethInput((prev) => prev.filter((_, i) => i !== index));
   };
 
   const handleItemChange = (index: number, field: keyof CreateOrderItemDto, value: unknown) => {
@@ -98,21 +100,23 @@ export function OrderForm({ laboratories, patients }: OrderFormProps) {
     }));
   };
 
-  const handleTeethChange = (index: number, value: string) => {
-    setTeethInput((prev) => prev.map((t, i) => (i === index ? value : t)));
-    const teeth = value
-      .split(',')
-      .map((t) => parseInt(t.trim()))
-      .filter((t) => !isNaN(t) && t > 0 && t < 49);
+  const handleTeethChange = (index: number, teeth: number[]) => {
     handleItemChange(index, 'teethNumbers', teeth);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!formData.laboratoryId) {
-      setError('Selecciona un laboratorio');
-      return;
+    if (isLaboratory) {
+      if (!formData.dentistId) {
+        setError('Selecciona un odontólogo');
+        return;
+      }
+    } else {
+      if (!formData.laboratoryId) {
+        setError('Selecciona un laboratorio');
+        return;
+      }
     }
 
     if (formData.items.length === 0) {
@@ -126,6 +130,8 @@ export function OrderForm({ laboratories, patients }: OrderFormProps) {
     try {
       const orderData: CreateOrderDto = {
         ...formData,
+        laboratoryId: isLaboratory ? '' : formData.laboratoryId,
+        dentistId: isLaboratory ? formData.dentistId : undefined,
         patientId: formData.patientId || undefined,
         patientName: formData.patientName || undefined,
         dueDate: formData.dueDate || undefined,
@@ -160,17 +166,33 @@ export function OrderForm({ laboratories, patients }: OrderFormProps) {
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Select
-              id="laboratoryId"
-              label="Laboratorio *"
-              value={formData.laboratoryId}
-              onChange={(e) => setFormData((prev) => ({ ...prev, laboratoryId: e.target.value }))}
-              options={laboratories.map((lab) => ({
-                value: lab.id,
-                label: lab.laboratoryProfile?.businessName || lab.email,
-              }))}
-              placeholder="Selecciona un laboratorio"
-            />
+            {isLaboratory ? (
+              <Select
+                id="dentistId"
+                label="Odontólogo *"
+                value={formData.dentistId || ''}
+                onChange={(e) => setFormData((prev) => ({ ...prev, dentistId: e.target.value }))}
+                options={dentists.map((dentist) => ({
+                  value: dentist.id,
+                  label: dentist.dentistProfile
+                    ? `${dentist.dentistProfile.firstName} ${dentist.dentistProfile.lastName}`
+                    : dentist.email,
+                }))}
+                placeholder="Selecciona un odontólogo"
+              />
+            ) : (
+              <Select
+                id="laboratoryId"
+                label="Laboratorio *"
+                value={formData.laboratoryId}
+                onChange={(e) => setFormData((prev) => ({ ...prev, laboratoryId: e.target.value }))}
+                options={laboratories.map((lab) => ({
+                  value: lab.id,
+                  label: lab.laboratoryProfile?.businessName || lab.email,
+                }))}
+                placeholder="Selecciona un laboratorio"
+              />
+            )}
 
             <Select
               id="patientId"
@@ -267,12 +289,11 @@ export function OrderForm({ laboratories, patients }: OrderFormProps) {
                     options={workTypes.map((t) => ({ value: t, label: getWorkTypeLabel(t) }))}
                   />
 
-                  <Input
+                  <TeethSelector
                     id={`teeth-${index}`}
                     label="Piezas dentales"
-                    value={teethInput[index] || ''}
-                    onChange={(e) => handleTeethChange(index, e.target.value)}
-                    placeholder="Ej: 11, 12, 21"
+                    value={item.teethNumbers || []}
+                    onChange={(teeth) => handleTeethChange(index, teeth)}
                   />
 
                   <Input

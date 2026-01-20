@@ -1,10 +1,11 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth';
 import { useLaboratories } from '@/hooks/useLaboratories';
+import { useDentists } from '@/hooks/useDentists';
 import { usePatients } from '@/hooks/usePatients';
 import { OrderForm } from '@/components/orders';
 import { LoadingScreen } from '@/components/ui';
@@ -13,18 +14,23 @@ export default function NewOrderPage() {
   const router = useRouter();
   const { user } = useAuth();
   const { laboratories, loading: loadingLabs } = useLaboratories();
+  const { dentists, loading: loadingDentists } = useDentists();
   const { patients, loading: loadingPatients } = usePatients();
 
-  // Only dentists can create orders
+  // Only dentists and laboratories can create orders
   useEffect(() => {
-    if (user && user.role !== 'DENTIST') {
+    if (user && user.role !== 'DENTIST' && user.role !== 'LABORATORY') {
       router.replace('/dashboard/orders');
     }
   }, [user, router]);
 
-  if (loadingLabs || loadingPatients) {
+  const isLoading = loadingLabs || loadingPatients || (user?.role === 'LABORATORY' && loadingDentists);
+
+  if (isLoading) {
     return <LoadingScreen />;
   }
+
+  const isLaboratory = user?.role === 'LABORATORY';
 
   return (
     <div className="space-y-6">
@@ -39,11 +45,20 @@ export default function NewOrderPage() {
         </Link>
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Nueva Orden de Trabajo</h1>
-          <p className="text-gray-500 mt-1">Crea una nueva orden para enviar a un laboratorio</p>
+          <p className="text-gray-500 mt-1">
+            {isLaboratory
+              ? 'Registra una orden recibida de un odontólogo'
+              : 'Crea una nueva orden para enviar a un laboratorio'}
+          </p>
         </div>
       </div>
 
-      <OrderForm laboratories={laboratories} patients={patients} />
+      <OrderForm
+        laboratories={laboratories}
+        dentists={dentists}
+        patients={patients}
+        userRole={user?.role || 'DENTIST'}
+      />
     </div>
   );
 }

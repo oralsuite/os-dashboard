@@ -199,6 +199,7 @@ export interface UpdatePatientDto {
 
 export interface CreateOrderDto {
   laboratoryId: string;
+  dentistId?: string;
   patientId?: string;
   patientName?: string;
   priority?: string;
